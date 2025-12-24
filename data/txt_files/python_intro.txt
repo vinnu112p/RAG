@@ -1,0 +1,21 @@
+Python Programming Introduction
+
+Python is a high-level, interpreted, general-purpose programming language designed to be simple, readable, and powerful.
+
+Key features :
+
+🧠 Easy to learn & read – clear, English-like syntax
+
+⚡ Interpreted – runs code line by line, no compilation
+
+🌍 Cross-platform – works on Windows, macOS, Linux
+
+📚 Large standard library – built-in tools for many tasks
+
+🔌 Rich ecosystem – thousands of third-party libraries
+
+🧩 Object-oriented & functional – supports multiple paradigms
+
+🚀 Versatile – used in web, data science, AI, automation, and more
+
+    

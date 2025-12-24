@@ -1,0 +1,18 @@
+ Machine Learning Introduction
+
+    Machine Learning (ML) is a branch of artificial intelligence that enables computers to learn from data and improve performance without being explicitly programmed.
+
+Key features
+
+📊 Data-driven – learns patterns from data
+
+🤖 Self-improving – performance improves with more data
+
+🧠 Predictive – makes predictions or decisions
+
+🔁 Automated learning – reduces manual rule-based coding
+
+📈 Scalable – works with large and complex datasets
+
+🌐 Wide applications – used in vision, speech, recommendation, fraud detection
+
