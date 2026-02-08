@@ -1,13 +1,14 @@
 <div align="center">
-  <h1>📚 RAG Pipeline: Complete Guide from Ingestion to Retrieval</h1>
+  <h1>📚 RAG Pipeline: Complete Guide from Ingestion to Generation</h1>
   <p>
-    <b>A comprehensive Retrieval-Augmented Generation (RAG) system built with Python, LangChain, and ChromaDB</b>
+    <b>A comprehensive Retrieval-Augmented Generation (RAG) system built with Python, LangChain, ChromaDB, and Groq LLM</b>
   </p>
   <p>
     <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python Version">
     <img src="https://img.shields.io/badge/LangChain-Framework-green.svg" alt="LangChain">
     <img src="https://img.shields.io/badge/ChromaDB-Vector%20Store-orange.svg" alt="ChromaDB">
     <img src="https://img.shields.io/badge/SentenceTransformers-Embeddings-yellow.svg" alt="Embeddings">
+    <img src="https://img.shields.io/badge/Groq-LLM%20Generation-purple.svg" alt="Groq LLM">
   </p>
 </div>
 
@@ -18,6 +19,7 @@
 - [Project Architecture](#️-project-architecture)
 - [Key Modules & Why We Use Them](#️-key-modules--why-we-use-them)
 - [Detailed Code Walkthrough](#-detailed-code-walkthrough)
+- [LLM Generation with Groq](#-llm-generation-with-groq)
 - [Folder Structure](#-folder-structure)
 - [Tech Stack](#-tech-stack)
 - [Setup & Installation](#-setup--installation)
@@ -61,6 +63,8 @@ Think of RAG like a smart research assistant:
       <td align="center"><b>💾 Vector Store</b></td>
       <td align="center">→</td>
       <td align="center"><b>🔍 Retrieval</b></td>
+      <td align="center">→</td>
+      <td align="center"><b>🤖 LLM Generation</b></td>
     </tr>
   </table>
 </div>
@@ -103,6 +107,14 @@ This project implements the complete RAG pipeline step-by-step:
 - **What**: Finding the most relevant chunks for a user's query
 - **Why**: We only want to show the LLM the top 5 most relevant passages, not all 10,000 chunks
 - **How**: Convert query to embedding → Find nearest neighbors using cosine similarity
+
+### 6. **LLM Generation** 🤖
+- **What**: Using a Large Language Model to generate human-readable answers from retrieved context
+- **Why**: 
+  - Raw retrieved chunks are often fragmented and hard to read
+  - LLMs can synthesize information from multiple chunks into coherent answers
+  - Provides a natural conversational interface
+- **How**: Using Groq's ultra-fast LLM API with models like `llama-3.1-8b-instant`
 
 <hr>
 
@@ -187,6 +199,27 @@ Here's a detailed explanation of every library and module used in this project:
         • 1 = identical meaning<br>
         • 0 = unrelated<br>
         • -1 = opposite meaning
+      </td>
+    </tr>
+    <tr>
+      <td><b><code>langchain_groq</code></b></td>
+      <td>LLM Integration</td>
+      <td>
+        Provides the <code>ChatGroq</code> class for connecting to Groq's LLM API:<br>
+        • <b>Ultra-fast inference</b>: Groq's custom hardware delivers responses in milliseconds<br>
+        • <b>Multiple models</b>: Supports Llama 3.1, Gemma 2, Mixtral, and more<br>
+        • <b>LangChain compatible</b>: Works seamlessly with the LangChain ecosystem<br>
+        • <b>Streaming support</b>: Real-time token-by-token output
+      </td>
+    </tr>
+    <tr>
+      <td><b><code>python-dotenv</code></b></td>
+      <td>Environment Variables</td>
+      <td>
+        Loads environment variables from a <code>.env</code> file:<br>
+        • Keeps API keys out of source code<br>
+        • <code>load_dotenv()</code> reads <code>.env</code> file into <code>os.environ</code><br>
+        • Essential for secure API key management
       </td>
     </tr>
   </tbody>
@@ -381,6 +414,217 @@ Results:
 
 ---
 
+## 🤖 LLM Generation with Groq
+
+After retrieving relevant context, we use **Groq's ultra-fast LLM API** to generate human-readable answers. This project implements three levels of RAG pipelines:
+
+### 📌 Setting Up Groq
+
+```python
+from langchain_groq import ChatGroq
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # Load API key from .env file
+
+llm = ChatGroq(
+    groq_api_key=os.getenv("GROQ_API_KEY"),
+    model_name="llama-3.1-8b-instant",  # Fast & capable
+    temperature=0.1,  # Low = more deterministic
+    max_tokens=1024
+)
+```
+
+**Why Groq?**
+- ⚡ **Blazing fast**: Responses in ~100ms thanks to custom LPU hardware
+- 🆓 **Free tier**: Generous rate limits for development
+- 🧠 **Quality models**: Access to Llama 3.1, Gemma 2, Mixtral
+- 🔗 **LangChain native**: Direct integration with `langchain_groq`
+
+---
+
+### 📌 Level 1: Simple RAG (`rag_simple`)
+
+The basic pipeline: Retrieve → Generate
+
+```python
+def rag_simple(query, retriever, llm, top_k=3):
+    # Step 1: Retrieve relevant context
+    results = retriever.retrieve(query, top_k=top_k)
+    context = "\n\n".join([doc['content'] for doc in results])
+    
+    if not context:
+        return "No relevant context found."
+    
+    # Step 2: Generate answer using LLM
+    prompt = f"""Use the following context to answer the question concisely.
+Context:
+{context}
+
+Question: {query}
+
+Answer:"""
+    
+    response = llm.invoke([prompt])
+    return response.content
+```
+
+**Usage:**
+```python
+answer = rag_simple("What is exception handling?", rag_retriever, llm)
+print(answer)
+# Output: "Exception handling is a mechanism in programming that..."
+```
+
+---
+
+### 📌 Level 2: Enhanced RAG (`rag_advanced`)
+
+Adds **source tracking**, **confidence scores**, and **context visibility**:
+
+```python
+def rag_advanced(query, retriever, llm, top_k=5, min_score=0.2, return_context=False):
+    results = retriever.retrieve(query, top_k=top_k, score_threshold=min_score)
+    
+    if not results:
+        return {'answer': 'No relevant context found.', 'sources': [], 
+                'confidence': 0.0, 'context': ''}
+    
+    # Prepare context and track sources
+    context = "\n\n".join([doc['content'] for doc in results])
+    sources = [{
+        'source': doc['metadata'].get('source', 'unknown'),
+        'page': doc['metadata'].get('page', 'unknown'),
+        'score': doc['similarity_score'],
+        'preview': doc['content'][:300] + '...'
+    } for doc in results]
+    confidence = max([doc['similarity_score'] for doc in results])
+    
+    # Generate answer
+    prompt = f"""Use the following context to answer the question concisely.
+Context:
+{context}
+
+Question: {query}
+
+Answer:"""
+    response = llm.invoke([prompt])
+    
+    return {
+        'answer': response.content,
+        'sources': sources,
+        'confidence': confidence,
+        'context': context if return_context else ''
+    }
+```
+
+**Usage:**
+```python
+result = rag_advanced("What is polymorphism?", rag_retriever, llm, 
+                      top_k=3, min_score=0.1, return_context=True)
+
+print(f"Answer: {result['answer']}")
+print(f"Confidence: {result['confidence']:.2%}")
+print(f"Sources: {[s['source'] for s in result['sources']]}")
+```
+
+**Output:**
+```
+Answer: Polymorphism is a core OOP concept that allows objects of different 
+classes to be treated as instances of a common parent class...
+
+Confidence: 87.50%
+Sources: ['../data/pdfs/JavaInterviewQuestions.pdf', ...]
+```
+
+---
+
+### 📌 Level 3: Advanced Pipeline (`AdvancedRAGPipeline`)
+
+Full-featured class with **streaming**, **citations**, **history tracking**, and **summarization**:
+
+```python
+class AdvancedRAGPipeline:
+    def __init__(self, retriever, llm):
+        self.retriever = retriever
+        self.llm = llm
+        self.history = []  # Conversation history
+    
+    def query(self, question, top_k=5, min_score=0.2, 
+              stream=False, summarize=False):
+        # Retrieve and generate (same as above)
+        ...
+        
+        # Add citations to answer
+        citations = [f"[{i+1}] {src['source']} (page {src['page']})" 
+                     for i, src in enumerate(sources)]
+        answer_with_citations = answer + "\n\nCitations:\n" + "\n".join(citations)
+        
+        # Optional: Generate summary
+        if summarize:
+            summary_prompt = f"Summarize in 2 sentences:\n{answer}"
+            summary = self.llm.invoke([summary_prompt]).content
+        
+        # Track history
+        self.history.append({
+            'question': question,
+            'answer': answer,
+            'sources': sources
+        })
+        
+        return {
+            'answer': answer_with_citations,
+            'sources': sources,
+            'summary': summary,
+            'history': self.history
+        }
+```
+
+**Usage:**
+```python
+adv_rag = AdvancedRAGPipeline(rag_retriever, llm)
+
+result = adv_rag.query(
+    "What is the default class modifier in Java?",
+    top_k=3, 
+    min_score=0.1, 
+    stream=True,      # See tokens as they generate
+    summarize=True    # Get a 2-sentence summary
+)
+
+print(result['answer'])
+print(f"\nSummary: {result['summary']}")
+print(f"\nQuery History: {len(result['history'])} questions asked")
+```
+
+**Output:**
+```
+The default class modifier in Java (also called package-private) means 
+the class is accessible only within the same package...
+
+Citations:
+[1] ../data/pdfs/JavaInterviewQuestions.pdf (page 12)
+[2] ../data/pdfs/JavaInterviewQuestions.pdf (page 15)
+
+Summary: In Java, the default modifier restricts class access to the same 
+package. This is applied when no explicit access modifier is specified.
+
+Query History: 1 questions asked
+```
+
+---
+
+### 📌 Available Groq Models
+
+| Model | Speed | Quality | Best For |
+|:------|:------|:--------|:---------|
+| `llama-3.1-8b-instant` | ⚡⚡⚡ | ★★★☆ | Fast RAG, simple Q&A |
+| `llama-3.1-70b-versatile` | ⚡⚡ | ★★★★★ | Complex reasoning |
+| `gemma2-9b-it` | ⚡⚡⚡ | ★★★★ | Balanced performance |
+| `mixtral-8x7b-32768` | ⚡⚡ | ★★★★ | Long context (32k tokens) |
+
+---
+
 ## 📂 Folder Structure
 
 ```
@@ -402,6 +646,7 @@ RAG/
 │
 ├── 📁 .venv/                       # Virtual environment (isolated Python packages)
 │
+├── .env                            # Environment variables (GROQ_API_KEY) - NOT committed
 ├── .gitignore                      # Git ignore file
 ├── requirements.txt                # Python dependencies
 ├── pyproject.toml                  # Project configuration
@@ -418,7 +663,9 @@ RAG/
 | **LangChain** | RAG framework & document processing |
 | **ChromaDB** | Vector database for embeddings |
 | **SentenceTransformers** | Neural embedding model |
+| **Groq LLM** | Ultra-fast LLM inference for answer generation |
 | **PyMuPDF** | PDF text extraction |
+| **python-dotenv** | Secure API key management |
 | **Jupyter Notebook** | Interactive development environment |
 
 ---
@@ -480,12 +727,29 @@ pip install -r requirements.txt
 This installs:
 - `langchain`
 - `langchain-community`
+- `langchain-groq`
 - `chromadb`
 - `sentence-transformers`
 - `pymupdf`
+- `python-dotenv`
 - And all their dependencies
 
-### Step 4: Launch Jupyter Notebook
+### Step 4: Set Up Groq API Key
+
+1. **Get your free API key** from [console.groq.com/keys](https://console.groq.com/keys)
+2. **Create a `.env` file** in the project root:
+   ```bash
+   # Create the file
+   echo GROQ_API_KEY=your_api_key_here > .env
+   ```
+   Or manually create `.env` with:
+   ```
+   GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+
+⚠️ **Important**: Never commit your `.env` file to Git! It's already in `.gitignore`.
+
+### Step 5: Launch Jupyter Notebook
 ```bash
 jupyter notebook
 ```
@@ -514,7 +778,7 @@ jupyter notebook
 
 4. **Query your documents**:
    ```python
-   # At the end of the notebook
+   # Simple retrieval (no LLM)
    results = rag_retriever.retrieve("Your question here")
    
    # Print clean results
@@ -523,6 +787,25 @@ jupyter notebook
        print(f"Source: {doc['metadata']['source']}")
        print(f"Similarity: {doc['similarity_score']:.2f}")
        print("-" * 50)
+   ```
+
+5. **Generate answers with Groq LLM**:
+   ```python
+   # Simple RAG (retrieval + generation)
+   answer = rag_simple("What is exception handling?", rag_retriever, llm)
+   print(answer)
+   
+   # Enhanced RAG (with sources and confidence)
+   result = rag_advanced("Explain polymorphism", rag_retriever, llm, 
+                         top_k=3, min_score=0.1, return_context=True)
+   print(f"Answer: {result['answer']}")
+   print(f"Confidence: {result['confidence']:.2%}")
+   
+   # Advanced RAG (with citations, history, summarization)
+   adv_rag = AdvancedRAGPipeline(rag_retriever, llm)
+   result = adv_rag.query("What is inheritance?", summarize=True)
+   print(result['answer'])
+   print(f"Summary: {result['summary']}")
    ```
 
 ### Adding Your Own Documents
@@ -542,8 +825,8 @@ If you notice your retrieval results include text from "before" your topic:
 ---
 
 <div align="center">
-  <h3>🎉 You now have a fully functional RAG system!</h3>
-  <p><i>Built with ❤️ for learning and exploration</i></p>
+  <h3>🎉 You now have a fully functional RAG system with LLM generation!</h3>
+  <p><i>From document ingestion to intelligent answers - built with ❤️ for learning and exploration</i></p>
 </div>
 
 <hr>
